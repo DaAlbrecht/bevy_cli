@@ -7,6 +7,7 @@
 use crate::lint::BevyLint;
 use rustc_lint::{Lint, LintStore};
 
+pub mod dublicated_bevy_dependencies;
 pub mod insert_event_resource;
 pub mod main_return_without_appexit;
 pub mod missing_reflect;
@@ -36,4 +37,5 @@ pub(crate) fn register_passes(store: &mut LintStore) {
     store.register_late_pass(|_| Box::new(panicking_methods::PanickingMethods));
     store.register_late_pass(|_| Box::new(plugin_not_ending_in_plugin::PluginNotEndingInPlugin));
     store.register_late_pass(|_| Box::new(zst_query::ZstQuery));
+    store.register_late_pass(|_| Box::new(dublicated_bevy_dependencies::DuplicatBevyDependencies));
 }

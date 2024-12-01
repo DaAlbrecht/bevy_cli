@@ -5,11 +5,14 @@
 //! When different third party crates use incompatible versions of Bevy, it can lead to confusing
 //! errors and type incompatibilities.
 
+use std::{ops::Range, path::Path};
+
 use crate::declare_bevy_lint;
+use cargo_metadata::{semver::VersionReq, Metadata, MetadataCommand, Package};
 use clippy_utils::{diagnostics::span_lint, find_crates, sym};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_session::impl_lint_pass;
-use rustc_span::Symbol;
+use rustc_span::{BytePos, Pos, SourceFile, Span, Symbol, SyntaxContext};
 
 declare_bevy_lint! {
     pub DUPLICATE_BEVY_DEPENDENCIES,
@@ -38,13 +41,68 @@ impl<'tcx> LateLintPass<'tcx> for DuplicateBevyDependencies {
         let bevy_crates = find_crates(cx.tcx, self.bevy_symbol);
 
         if bevy_crates.len() > 1 {
-            let span = cx.tcx.def_span(bevy_crates[1].def_id());
-            span_lint(
-                cx,
-                DUPLICATE_BEVY_DEPENDENCIES.lint,
-                span,
-                "Multiple versions of `bevy` found",
-            );
+            match MetadataCommand::new().exec() {
+                Ok(metadata) => {
+                    check(cx, &metadata);
+                }
+                Err(e) => {
+                    span_lint(
+                        cx,
+                        DUPLICATE_BEVY_DEPENDENCIES.lint,
+                        rustc_span::DUMMY_SP,
+                        format!("could not read cargo metadata: {e}"),
+                    );
+                }
+            }
         }
     }
+}
+
+fn check(cx: &LateContext<'_>, metadata: &Metadata) {
+    let file = cx
+        .tcx
+        .sess
+        .source_map()
+        .load_file(Path::new("Cargo.toml"))
+        .unwrap();
+
+    let bevy_crate = metadata
+        .packages
+        .iter()
+        .filter(|package| package.name == "bevy")
+        .cloned()
+        .collect::<Vec<Package>>();
+
+    let bevy_dependents = metadata
+        .packages
+        .iter()
+        .map(|package| {
+            package
+                .dependencies
+                .iter()
+                .filter_map(|dependency| match dependency.name.as_str() {
+                    "bevy" => Some((package.name.as_str(), dependency.req.clone())),
+                    _ => None,
+                })
+                .collect::<Vec<(&str, VersionReq)>>()
+        })
+        .flatten()
+        .collect::<Vec<(&str, VersionReq)>>();
+
+    println!("bevy_dependents: {:?}", bevy_dependents);
+
+    bevy_crate.iter().for_each(|bevy| {
+        println!("version: {}", bevy.version);
+    });
+
+    span_lint(
+        cx,
+        DUPLICATE_BEVY_DEPENDENCIES.lint,
+        toml_span(&file),
+        "Multiple versions of `bevy` found",
+    );
+}
+
+fn toml_span(file: &SourceFile) -> Span {
+    Span::new(file.start_pos, file.start_pos, SyntaxContext::root(), None)
 }

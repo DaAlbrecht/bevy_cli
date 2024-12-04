@@ -5,14 +5,14 @@
 //! When different third party crates use incompatible versions of Bevy, it can lead to confusing
 //! errors and type incompatibilities.
 
-use std::{ops::Range, path::Path};
+use std::path::Path;
 
-use crate::declare_bevy_lint;
+use crate::{declare_bevy_lint, lints::cargo::toml_span};
 use cargo_metadata::{semver::VersionReq, Metadata, MetadataCommand, Package};
 use clippy_utils::{diagnostics::span_lint, find_crates, sym};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_session::impl_lint_pass;
-use rustc_span::{BytePos, Pos, SourceFile, Span, Symbol, SyntaxContext};
+use rustc_span::Symbol;
 
 declare_bevy_lint! {
     pub DUPLICATE_BEVY_DEPENDENCIES,
@@ -66,6 +66,12 @@ fn check(cx: &LateContext<'_>, metadata: &Metadata) {
         .load_file(Path::new("Cargo.toml"))
         .unwrap();
 
+    let cargo_src = file.src.as_deref();
+
+    let toml_schmomel = toml::from_str::<String>(cargo_src.unwrap());
+
+    dbg!(toml_schmomel);
+
     let bevy_crate = metadata
         .packages
         .iter()
@@ -101,8 +107,4 @@ fn check(cx: &LateContext<'_>, metadata: &Metadata) {
         toml_span(&file),
         "Multiple versions of `bevy` found",
     );
-}
-
-fn toml_span(file: &SourceFile) -> Span {
-    Span::new(file.start_pos, file.start_pos, SyntaxContext::root(), None)
 }

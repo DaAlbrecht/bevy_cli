@@ -5,9 +5,10 @@
 //! [`missing_reflect::MISSING_REFLECT`].
 
 use crate::lint::BevyLint;
+use cargo::duplicate_bevy_dependencies;
 use rustc_lint::{Lint, LintStore};
 
-pub mod duplicate_bevy_dependencies;
+pub mod cargo;
 pub mod insert_event_resource;
 pub mod main_return_without_appexit;
 pub mod missing_reflect;

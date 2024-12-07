@@ -5,136 +5,74 @@
 //! When different third party crates use incompatible versions of Bevy, it can lead to confusing
 //! errors and type incompatibilities.
 
-use std::{path::Path, str::FromStr};
+use std::{collections::HashMap, path::Path, str::FromStr};
 
-use crate::{
-    declare_bevy_lint,
-    lints::cargo::{toml_span, CargoToml},
-};
+use crate::lints::cargo::{toml_span, CargoToml, DUPLICATE_BEVY_DEPENDENCIES};
 use cargo_metadata::{
-    semver::{Error, Version, VersionReq},
-    Metadata, MetadataCommand, Package,
+    semver::{Error, Version},
+    Metadata,
 };
-use clippy_utils::{diagnostics::span_lint, find_crates, sym};
+use clippy_utils::{
+    diagnostics::{span_lint, span_lint_and_help},
+    find_crates,
+};
 use rustc_hir::def_id::LOCAL_CRATE;
-use rustc_lint::{LateContext, LateLintPass};
-use rustc_session::impl_lint_pass;
+use rustc_lint::LateContext;
 use rustc_span::Symbol;
 
-declare_bevy_lint! {
-    pub DUPLICATE_BEVY_DEPENDENCIES,
-    CORRECTNESS,
-    "duplicate bevy dependencies",
-}
-
-pub(crate) struct DuplicateBevyDependencies {
-    bevy_symbol: Symbol,
-}
-
-impl Default for DuplicateBevyDependencies {
-    fn default() -> Self {
-        Self {
-            bevy_symbol: sym!(bevy),
-        }
+pub(super) fn check(cx: &LateContext<'_>, metadata: &Metadata, bevy_symbol: Symbol) {
+    // no reason to continue the check if there is only one instance of `bevy` required
+    if find_crates(cx.tcx, bevy_symbol).len() == 1 {
+        return;
     }
-}
 
-impl_lint_pass! {
-     DuplicateBevyDependencies => [DUPLICATE_BEVY_DEPENDENCIES.lint]
-}
+    if let Ok(file) = cx.tcx.sess.source_map().load_file(Path::new("Cargo.toml"))
+        && let Some(src) = file.src.as_deref()
+        && let Ok(cargo_toml) = toml::from_str::<CargoToml>(src)
+    {
+        let local_name = cx.tcx.crate_name(LOCAL_CRATE);
+        let target_version = get_version_from_toml(
+            cargo_toml
+                .dependencies
+                .get("bevy")
+                .unwrap()
+                .as_ref()
+                .clone(),
+        )
+        .unwrap();
 
-impl<'tcx> LateLintPass<'tcx> for DuplicateBevyDependencies {
-    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
-        let bevy_crates = find_crates(cx.tcx, self.bevy_symbol);
+        let mut incoherent_bevy_dependents = HashMap::new();
 
-        if bevy_crates.len() > 1 {
-            match MetadataCommand::new().exec() {
-                Ok(metadata) => {
-                    check(cx, &metadata);
-                }
-                Err(e) => {
-                    span_lint(
-                        cx,
-                        DUPLICATE_BEVY_DEPENDENCIES.lint,
-                        rustc_span::DUMMY_SP,
-                        format!("could not read cargo metadata: {e}"),
-                    );
+        for package in &metadata.packages {
+            for dependency in &package.dependencies {
+                if dependency.name.as_str() == "bevy"
+                    && package.name.as_str() != local_name.as_str()
+                    && !dependency.req.matches(&target_version)
+                {
+                    incoherent_bevy_dependents
+                        .insert(package.name.as_str(), dependency.req.clone());
                 }
             }
         }
-    }
-}
-
-fn check(cx: &LateContext<'_>, metadata: &Metadata) {
-    let local_name = cx.tcx.crate_name(LOCAL_CRATE);
-
-    let file = cx
-        .tcx
-        .sess
-        .source_map()
-        .load_file(Path::new("Cargo.toml"))
-        .unwrap();
-
-    let cargo_src = file.src.as_deref();
-
-    let cargo_toml = toml::from_str::<CargoToml>(cargo_src.unwrap()).unwrap();
-
-    let target_version = get_version_from_toml(
-        cargo_toml
+        let bevy_toml_ref = cargo_toml
             .dependencies
             .get("bevy")
-            .unwrap()
-            .as_ref()
-            .clone(),
-    )
-    .unwrap();
-
-    dbg!(&target_version);
-
-    let bevy_dependents = metadata
-        .packages
-        .iter()
-        .flat_map(|package| {
-            package
-                .dependencies
-                .iter()
-                .filter_map(|dependency| match dependency.name.as_str() {
-                    "bevy" => {
-                        if package.name.as_str() == local_name.as_str() {
-                            return None;
-                        }
-                        Some((package.name.as_str(), dependency.req.clone()))
-                    }
-                    _ => None,
-                })
-                .collect::<Vec<(&str, VersionReq)>>()
-        })
-        .collect::<Vec<(&str, VersionReq)>>();
-
-    let incoherent_bevy_dependents = bevy_dependents
-        .iter()
-        .filter(|(_, dependent_version)| dependent_version.matches(&target_version))
-        .cloned()
-        .collect::<Vec<(&str, VersionReq)>>();
-
-    incoherent_bevy_dependents
-        .iter()
-        .for_each(|incoherent_version| {
-            dbg!(cargo_toml.dependencies.get(incoherent_version.0));
-            let cargo_toml_reference = cargo_toml
-                .dependencies
-                .get(incoherent_version.0)
-                .expect("crate to be present");
-            span_lint(
-                cx,
-                DUPLICATE_BEVY_DEPENDENCIES.lint,
-                toml_span(cargo_toml_reference.span(), &file),
-                format!(
-                    "Mismatching versions of `bevy` found, expected crate to be using bevy version: {}",
-                    target_version.to_string()
-                ),
-            );
-        });
+            .expect("bevy to be present");
+        let bevy_ref_span = toml_span(bevy_toml_ref.span(), &file);
+        for incoherent_version in &incoherent_bevy_dependents {
+            // this can error if a dependency has a dependency that requires an incoherent version
+            if let Some(cargo_toml_reference) = cargo_toml.dependencies.get(*incoherent_version.0) {
+                span_lint_and_help(
+                    cx,
+                    DUPLICATE_BEVY_DEPENDENCIES.lint,
+                    toml_span(cargo_toml_reference.span(), &file),
+                    "Mismatching versions of `bevy` found".to_string(),
+                    Some(bevy_ref_span),
+                    format!("Help: Expected all crates to use `bevy` {target_version}"),
+                );
+            }
+        }
+    }
 }
 
 fn get_version_from_toml(table: toml::Value) -> Result<Version, Error> {

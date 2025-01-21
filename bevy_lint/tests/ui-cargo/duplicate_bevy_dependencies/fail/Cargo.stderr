@@ -1,8 +1,8 @@
 error: Mismatching versions of `bevy` found
-  --> Cargo.toml:11:26
+  --> Cargo.toml:11:13
    |
-11 | leafwing-input-manager = "0.13"
-   |                          ^^^^^^
+11 | bevy_egui = "0.27"
+   |             ^^^^^^
    |
 help: Expected all crates to use `bevy` 0.14.2
   --> Cargo.toml:10:8

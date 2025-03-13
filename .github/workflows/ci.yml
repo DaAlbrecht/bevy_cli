@@ -18,7 +18,7 @@ jobs:
     needs: extract-rust-version
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository

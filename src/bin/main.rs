@@ -7,6 +7,7 @@ use bevy_cli::commands::{
     lint::{LintArgs, lint},
     new::{NewArgs, new},
     run::{RunArgs, run},
+    watch::{WatchArgs, watch},
 };
 use clap::{Parser, Subcommand, builder::styling::Style};
 use clap_cargo::style;
@@ -46,6 +47,7 @@ fn main() -> ExitCode {
         Subcommands::Lint(mut args) => lint(&mut args),
         Subcommands::Build(mut args) => build(&mut args),
         Subcommands::Run(mut args) => run(&mut args),
+        Subcommands::Watch(args) => watch(&args),
         Subcommands::Completions { shell } => {
             completions::<Cli>(shell);
             Ok(())
@@ -121,6 +123,11 @@ pub enum Subcommands {
     /// To see the full list of options, run `bevy lint -- --help`.
     #[command(after_help = lint_after_help())]
     Lint(LintArgs),
+    /// Watch the filesystem and trigger a rebuild on change.
+    ///
+    /// To see the full list of options, run `bevy watch -- --help`.
+    #[command()]
+    Watch(WatchArgs),
     /// Prints the auto-completion script for a specific shell.
     ///
     /// The result of this command is intended to be passed to the `source` command, such as

@@ -116,7 +116,7 @@ fn build_lint_cmd(args: &mut LintArgs) -> anyhow::Result<CommandExt> {
 
     let mut config = CliConfig::for_package(
         &metadata,
-        bin_target.package,
+        &bin_target.package,
         args.is_web(),
         args.is_release(),
     )?;

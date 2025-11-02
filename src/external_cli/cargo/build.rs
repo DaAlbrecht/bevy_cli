@@ -10,7 +10,7 @@ pub(crate) fn command() -> CommandExt {
     command
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Args, Clone)]
 pub struct CargoBuildArgs {
     #[clap(flatten)]
     pub common_args: CargoCommonArgs,
@@ -38,7 +38,7 @@ impl CargoBuildArgs {
     }
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Args, Clone)]
 #[command(next_help_heading = "Package Selection")]
 pub struct CargoPackageBuildArgs {
     /// Package to build (see `cargo help pkgid`)
@@ -63,7 +63,7 @@ impl CargoPackageBuildArgs {
     }
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Args, Clone)]
 #[command(next_help_heading = "Target Selection")]
 pub struct CargoTargetBuildArgs {
     /// Build only this package's library

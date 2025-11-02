@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use cargo_metadata::{Metadata, Package, TargetKind};
 
 #[derive(Debug, Clone)]
-pub struct BinTarget<'p> {
+pub struct BinTarget {
     /// The package containing the binary.
-    pub package: &'p Package,
+    pub package: Package,
     /// The path to the directory in `target` which contains the binary.
     // Only used with `web` feature, but cfg-ing it out adds too much boilerplate
     #[allow(dead_code)]
@@ -16,7 +16,7 @@ pub struct BinTarget<'p> {
     pub bin_name: String,
 }
 
-impl BinTarget<'_> {
+impl BinTarget {
     pub fn update_artifact_directory(
         &mut self,
         target_directory: impl Into<PathBuf>,
@@ -42,14 +42,14 @@ impl BinTarget<'_> {
 /// and the `default-run` package option are taken into account.
 ///
 /// The path to the compiled binary is determined via the compilation target and profile.
-pub(crate) fn select_run_binary<'p>(
-    metadata: &'p Metadata,
+pub(crate) fn select_run_binary(
+    metadata: &Metadata,
     package_name: Option<&str>,
     bin_name: Option<&str>,
     example_name: Option<&str>,
     compile_target: Option<&str>,
     compile_profile: &str,
-) -> anyhow::Result<BinTarget<'p>> {
+) -> anyhow::Result<BinTarget> {
     let workspace_packages = metadata.workspace_packages();
 
     // Narrow down the packages that the binary could be contained in:
@@ -187,8 +187,10 @@ pub(crate) fn select_run_binary<'p>(
         is_example,
     );
 
+    let package = *package;
+
     Ok(BinTarget {
-        package,
+        package: package.clone(),
         bin_name: target.name.clone(),
         artifact_directory,
     })

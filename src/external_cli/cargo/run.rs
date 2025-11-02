@@ -10,7 +10,7 @@ pub(crate) fn command() -> CommandExt {
     command
 }
 
-#[derive(Debug, Args, Clone)]
+#[derive(Debug, Args, Clone, Default)]
 pub struct CargoRunArgs {
     #[clap(flatten)]
     pub common_args: CargoCommonArgs,
@@ -38,7 +38,7 @@ impl CargoRunArgs {
     }
 }
 
-#[derive(Debug, Args, Clone)]
+#[derive(Debug, Args, Clone, Default)]
 #[command(next_help_heading = "Package Selection")]
 pub struct CargoPackageRunArgs {
     /// Package with the target to run
@@ -52,7 +52,7 @@ impl CargoPackageRunArgs {
     }
 }
 
-#[derive(Debug, Args, Clone)]
+#[derive(Debug, Args, Clone, Default)]
 #[command(next_help_heading = "Target Selection")]
 pub struct CargoTargetRunArgs {
     /// Build only the specified binary.
